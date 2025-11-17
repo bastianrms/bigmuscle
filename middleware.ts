@@ -1,61 +1,100 @@
-import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
-// Route für die Login-Seite
-const loginPage = "/login";
+// Define the route that contains your login page
+const loginPage = '/'
 
-// Öffentliche Routen (ohne Login erreichbar)
-const publicRoutes = ["/", "/login", "/signup", "/plasmic-host"];
+// Add any public (non-login protected) routes here
+// All other routes will be login protected
+// Important: plasmic-host and your login page must always be public
+const publicRoutes = [
+  '/',
+  '/signup',
+  '/plasmic-host'
+]
 
+// Middleware function
+// This will run on every request to your app that matches the pattern at the bottom of this file
+// Adapted from @supabase/ssr docs https://supabase.com/docs/guides/auth/server-side/nextjs?queryGroups=router&router=app
 export async function middleware(request: NextRequest) {
-  // Basis-Response vorbereiten
-  let response = NextResponse.next();
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  let supabaseResponse = NextResponse.next({
+    request,
+  })
 
-  // Failsafe: Wenn Env Vars in Prod fehlen, lieber keine Auth erzwingen als 500 werfen
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return response;
-  }
-
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
+  //Create a new supabase client
+  //Refresh expired auth tokens and set new cookies
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({
+            request,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
       },
-      setAll(cookiesToSet) {
-        // Wichtig: NICHT request.cookies mutieren, nur die Response-Cookies setzen
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
-      },
-    },
-  });
+    }
+  )
 
-  // User aus der Supabase Session holen
+  // IMPORTANT: Avoid writing any logic between createServerClient and
+  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
+  // issues with users being randomly logged out.
+
+  // Get details of the logged in user if present
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser()
+  
+  // Decide whether to redirect to the /login page or not
+  // You can adapt this logic to suit your needs
 
-  const pathname = request.nextUrl.pathname;
-
-  const isPublic = publicRoutes.includes(pathname);
-
-  // Wenn Route geschützt ist und kein User → Redirect auf /login
-  if (!isPublic && !user) {
-    const url = request.nextUrl.clone();
+  if (publicRoutes.includes(request.nextUrl.pathname) !== true && !user) {
+    // It's a login protected route but there's no logged in user. 
+    // Respond by redirecting the user to the login page
+    const url = request.nextUrl.clone()
     url.pathname = loginPage;
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(url)
+
+  } else {
+    // It's a public route, or it's a login protected route and there is a logged in user. 
+    // Proceed as normal
+    return supabaseResponse
   }
 
-  // Ansonsten normal weitermachen
-  return response;
+  // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
+  // creating a new response object with NextResponse.next() make sure to:
+  // 1. Pass the request in it, like so:
+  //    const myNewResponse = NextResponse.next({ request })
+  // 2. Copy over the cookies, like so:
+  //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
+  // 3. Change the myNewResponse object to fit your needs, but avoid changing
+  //    the cookies!
+  // 4. Finally:
+  //    return myNewResponse
+  // If this is not done, you may be causing the browser and server to go out
+  // of sync and terminate the user's session prematurely!
+
 }
 
-// Nur auf diese Pfade anwenden
+//Only run middleware on requests that match this pattern
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /*
+    * Match all request paths except for the ones starting with:
+    * - _next/static (static files)
+    * - _next/image (image optimization files)
+    * - favicon.ico (favicon file)
+    * Feel free to modify this pattern to include more paths.
+    */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
-};
+}
