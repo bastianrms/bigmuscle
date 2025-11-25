@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 
 type Props = {
   userId: string;
@@ -34,10 +35,7 @@ const PhotoUpload: React.FC<Props> = ({
         body: formData,
       });
 
-      const data: unknown = await res.json();
-
-      // Wir wissen, was unser API-Shape ist
-      const typedData = data as {
+      const typedData = (await res.json()) as {
         success?: boolean;
         url?: string;
         error?: string;
@@ -75,11 +73,15 @@ const PhotoUpload: React.FC<Props> = ({
       {imageUrl && (
         <div>
           <div style={{ fontSize: "0.8rem" }}>Uploaded image:</div>
-          {/* Next/Image können wir später machen, Warnung ist nur Info */}
-          <img
+          <Image
             src={imageUrl}
-            alt="Uploaded"
-            style={{ maxWidth: "200px", borderRadius: "8px" }}
+            alt="Uploaded photo"
+            width={200}       // feste Maße für Next/Image (kannst du anpassen)
+            height={200}
+            style={{
+              objectFit: "cover",
+              borderRadius: "8px",
+            }}
           />
         </div>
       )}
