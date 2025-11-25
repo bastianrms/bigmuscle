@@ -10,6 +10,8 @@ import {
   SupabaseStorageGetSignedUrlMeta,
 } from "plasmic-supabase"
 
+// ⭐ Wichtig: Deinen PhotoUpload importieren
+import PhotoUpload from "./components/PhotoUpload";
 
 export const PLASMIC = initPlasmicLoader({
   projects: [
@@ -33,3 +35,24 @@ PLASMIC.registerGlobalContext(SupabaseUserGlobalContext, SupabaseUserGlobalConte
 PLASMIC.registerComponent(SupabaseProvider, SupabaseProviderMeta);
 PLASMIC.registerComponent(SupabaseUppyUploader, SupabaseUppyUploaderMeta);
 PLASMIC.registerComponent(SupabaseStorageGetSignedUrl, SupabaseStorageGetSignedUrlMeta);
+
+// ⭐ Unser neues PhotoUpload registrieren
+PLASMIC.registerComponent(PhotoUpload, {
+  name: "PhotoUpload",
+  description: "Upload photos to R2 and save metadata to Supabase",
+  props: {
+    userId: {
+      type: "string",
+      displayName: "User ID",
+      description: "Supabase user_id assigned to this photo",
+      defaultValueHint: "example-user-id",
+    },
+    defaultVisibility: {
+      type: "choice",
+      options: ["public", "private"],
+      displayName: "Default Visibility",
+      description: "Initial visibility of the uploaded photo",
+      defaultValue: "private",
+    },
+  },
+});
