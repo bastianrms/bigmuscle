@@ -2,31 +2,21 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import sharp from "sharp";
 import { uploadToR2 } from "@/lib/r2";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// Supabase Server-Client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("Supabase env vars are missing on the server");
-}
-
-const supabase =
-  supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey)
-    : null;
-
-type Visibility = "private" | "hidden";
+type UploadResult = {
+  url: string;
+  bytes: number;
+};
 
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const userId = formData.get("userId") as string | null;
-    const visibilityRaw = formData.get("visibility") as string | null;
+    const visibility =
+      (formData.get("visibility") as "public" | "private" | null) ?? "private";
 
     if (!file || !userId) {
       return NextResponse.json(
@@ -35,105 +25,55 @@ export async function POST(req: Request) {
       );
     }
 
-    // visibility normalisieren
-    let visibility: Visibility = "private";
-    if (visibilityRaw === "hidden") {
-      visibility = "hidden";
+    // Original-Datei einlesen
+    const originalArrayBuffer = await file.arrayBuffer();
+    const originalBuffer = Buffer.from(originalArrayBuffer);
+
+    // Helper für R2-Upload (du hast ja schon uploadToR2, wir nutzen das)
+    async function uploadVariant(
+      buf: Buffer,
+      suffix: "xl" | "medium" | "thumb",
+      mime: string
+    ): Promise<UploadResult> {
+      const ext = "webp"; // wir speichern ja alles als webp
+      const key = `${userId}/${Date.now()}-${suffix}.${ext}`;
+
+      const url = await uploadToR2({
+        key,
+        body: buf,
+        contentType: mime,
+      });
+
+      return { url, bytes: buf.length };
     }
 
-    if (!supabase) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Supabase configuration is missing on the server",
-        },
-        { status: 500 }
-      );
-    }
+    // Aktuell: alle drei Varianten noch identisch → später durch sharp-Resizes ersetzen
+    const xlBuffer = originalBuffer;
+    const mediumBuffer = originalBuffer;
+    const thumbBuffer = originalBuffer;
 
-    // Datei in Buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const inputBuffer = Buffer.from(arrayBuffer);
+    const mimeType = "image/webp";
 
-    const image = sharp(inputBuffer).rotate();
-
-    // 1) XL – max 1400px Breite, webp, Ziel ~100 kb
-    const xlBuffer = await image
-      .clone()
-      .resize({
-        width: 1400,
-        withoutEnlargement: true,
-      })
-      .webp({
-        quality: 80,
-      })
-      .toBuffer();
-
-    // 2) Medium – max 800px Breite, webp, Ziel ~50 kb (Quality runter)
-    const mediumBuffer = await image
-      .clone()
-      .resize({
-        width: 800,
-        withoutEnlargement: true,
-      })
-      .webp({
-        quality: 60, // vorher 75, jetzt aggressiver für ~50kb
-      })
-      .toBuffer();
-
-    // 3) Thumbnail – max 400px Breite, webp, Ziel ~30 kb
-    const thumbBuffer = await image
-      .clone()
-      .resize({
-        width: 400,
-        withoutEnlargement: true,
-      })
-      .webp({
-        quality: 70,
-      })
-      .toBuffer();
-
-    const timestamp = Date.now();
-    const baseKey = `${userId}/${timestamp}`;
-
-    const xlKey = `${baseKey}_xl.webp`;
-    const mediumKey = `${baseKey}_medium.webp`;
-    const thumbKey = `${baseKey}_thumb.webp`;
-
-    // Upload zu R2
-    const [xlUrl, mediumUrl, thumbUrl] = await Promise.all([
-      uploadToR2({
-        key: xlKey,
-        body: xlBuffer,
-        contentType: "image/webp",
-      }),
-      uploadToR2({
-        key: mediumKey,
-        body: mediumBuffer,
-        contentType: "image/webp",
-      }),
-      uploadToR2({
-        key: thumbKey,
-        body: thumbBuffer,
-        contentType: "image/webp",
-      }),
+    const [xl, medium, thumb] = await Promise.all([
+      uploadVariant(xlBuffer, "xl", mimeType),
+      uploadVariant(mediumBuffer, "medium", mimeType),
+      uploadVariant(thumbBuffer, "thumb", mimeType),
     ]);
 
-    // file_size_kb = Größe der XL-Version
-    const fileSizeKb = Math.round(xlBuffer.length / 1024);
+    const fileSizeKb = Math.round(xl.bytes / 1024);
 
-    // Supabase: Tabelle heißt user_photos
-    const { data, error } = await supabase
+    // ----- Supabase-Insert -----
+    const { data, error } = await supabaseAdmin
       .from("user_photos")
       .insert({
         user_id: userId,
-        xl_url: xlUrl,
-        medium_url: mediumUrl,
-        thumb_url: thumbUrl,
-        file_size_kb: fileSizeKb,        // XL-Size in KB
-        moderation_status: "pending",    // Default-Status
-        visibility: visibility,          // "private" oder "hidden"
-        // created_at: via Default in DB
+        xl_url: xl.url,
+        medium_url: medium.url,
+        thumb_url: thumb.url,
+        visibility,
+        file_size_kb: fileSizeKb,
+        // moderation_status bleibt default 'pending'
+        // created_at wird von Supabase automatisch gesetzt
       })
       .select()
       .single();
@@ -144,6 +84,8 @@ export async function POST(req: Request) {
         {
           success: false,
           error: "Failed to save photo metadata in Supabase",
+          supabaseError: error.message,
+          supabaseCode: (error as any).code ?? null,
         },
         { status: 500 }
       );
@@ -151,11 +93,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      xl_url: xlUrl,
-      medium_url: mediumUrl,
-      thumb_url: thumbUrl,
+      xl_url: xl.url,
+      medium_url: medium.url,
+      thumb_url: thumb.url,
       file_size_kb: fileSizeKb,
-      photo: data,
+      row: data,
     });
   } catch (err: unknown) {
     console.error("Upload error:", err);
