@@ -1,18 +1,36 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const accountId = process.env.R2_ACCOUNT_ID!;
-const bucketName = process.env.R2_BUCKET_NAME!;
-const accessKey = process.env.R2_ACCESS_KEY_ID!;
-const secretKey = process.env.R2_SECRET_ACCESS_KEY!;
-const publicBase = process.env.R2_PUBLIC_BASE_URL!;
+const rawAccountId = process.env.R2_ACCOUNT_ID;
+const rawBucketName = process.env.R2_BUCKET_NAME;
+const rawAccessKey = process.env.R2_ACCESS_KEY_ID;
+const rawSecretKey = process.env.R2_SECRET_ACCESS_KEY;
+const rawPublicBase = process.env.R2_PUBLIC_BASE_URL;
+
+// kleine Sicherheit: Whitespace wegtrimmen
+const accountId = rawAccountId?.trim() ?? "";
+const bucketName = rawBucketName?.trim() ?? "";
+const accessKey = rawAccessKey?.trim() ?? "";
+const secretKey = rawSecretKey?.trim() ?? "";
+const publicBase = rawPublicBase?.trim() ?? "";
+
+// Debug-Ausgabe (nur Booleans, keine Secrets!)
+console.log("R2 ENV CHECK", {
+  accountId: !!accountId,
+  bucketName: !!bucketName,
+  accessKey: !!accessKey,
+  secretKey: !!secretKey,
+  publicBase: !!publicBase,
+});
+
+if (!accountId || !bucketName || !accessKey || !secretKey || !publicBase) {
+  throw new Error("R2 configuration is incomplete on the server");
+}
 
 export async function uploadToR2(params: {
   key: string;
   body: Buffer;
   contentType: string;
 }) {
-
-  // Der Client MUSS in der Funktion erstellt werden (nicht exportieren!)
   const client = new S3Client({
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -32,6 +50,5 @@ export async function uploadToR2(params: {
 
   await client.send(command);
 
-  // Public URL über deine R2 public domain
   return `${publicBase}/${params.key}`;
 }
