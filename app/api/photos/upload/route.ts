@@ -17,6 +17,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // Datei in Buffer umwandeln
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
     const contentType = file.type || "image/jpeg";
     const key = `${userId}/${Date.now()}.${ext}`;
 
+    // Upload – Env wird in lib/r2.ts geprüft
     const url = await uploadToR2({
       key,
       body: buffer,
@@ -33,7 +35,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, url });
   } catch (err: unknown) {
     console.error("Upload error:", err);
-
     const message =
       err instanceof Error ? err.message : "Upload failed (unknown error)";
 
