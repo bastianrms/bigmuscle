@@ -6,24 +6,25 @@ const rawAccessKey = process.env.R2_ACCESS_KEY_ID;
 const rawSecretKey = process.env.R2_SECRET_ACCESS_KEY;
 const rawPublicBase = process.env.R2_PUBLIC_BASE_URL;
 
-// kleine Sicherheit: Whitespace wegtrimmen
-const accountId = rawAccountId?.trim() ?? "";
-const bucketName = rawBucketName?.trim() ?? "";
-const accessKey = rawAccessKey?.trim() ?? "";
-const secretKey = rawSecretKey?.trim() ?? "";
-const publicBase = rawPublicBase?.trim() ?? "";
+const accountId = rawAccountId?.trim();
+const bucketName = rawBucketName?.trim();
+const accessKey = rawAccessKey?.trim();
+const secretKey = rawSecretKey?.trim();
+const publicBase = rawPublicBase?.trim();
 
-// Debug-Ausgabe (nur Booleans, keine Secrets!)
-console.log("R2 ENV CHECK", {
-  accountId: !!accountId,
-  bucketName: !!bucketName,
-  accessKey: !!accessKey,
-  secretKey: !!secretKey,
-  publicBase: !!publicBase,
-});
+function ensureR2Config() {
+  // Nur Booleans loggen, keine Secrets
+  console.log("R2 ENV CHECK", {
+    accountId: !!accountId,
+    bucketName: !!bucketName,
+    accessKey: !!accessKey,
+    secretKey: !!secretKey,
+    publicBase: !!publicBase,
+  });
 
-if (!accountId || !bucketName || !accessKey || !secretKey || !publicBase) {
-  throw new Error("R2 configuration is incomplete on the server");
+  if (!accountId || !bucketName || !accessKey || !secretKey || !publicBase) {
+    throw new Error("R2 configuration is incomplete on the server");
+  }
 }
 
 export async function uploadToR2(params: {
@@ -31,18 +32,21 @@ export async function uploadToR2(params: {
   body: Buffer;
   contentType: string;
 }) {
+  // Prüfung zur Laufzeit, innerhalb des Funktionsaufrufs
+  ensureR2Config();
+
   const client = new S3Client({
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: accessKey,
-      secretAccessKey: secretKey,
+      accessKeyId: accessKey!,
+      secretAccessKey: secretKey!,
     },
     forcePathStyle: true,
   });
 
   const command = new PutObjectCommand({
-    Bucket: bucketName,
+    Bucket: bucketName!,
     Key: params.key,
     Body: params.body,
     ContentType: params.contentType,
