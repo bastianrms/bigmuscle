@@ -13,17 +13,21 @@ const secretKey = rawSecretKey?.trim();
 const publicBase = rawPublicBase?.trim();
 
 function ensureR2Config() {
-  // Nur Booleans loggen, keine Secrets
-  console.log("R2 ENV CHECK", {
+  const flags = {
     accountId: !!accountId,
     bucketName: !!bucketName,
     accessKey: !!accessKey,
     secretKey: !!secretKey,
     publicBase: !!publicBase,
-  });
+  };
 
-  if (!accountId || !bucketName || !accessKey || !secretKey || !publicBase) {
-    throw new Error("R2 configuration is incomplete on the server");
+  console.log("R2 ENV CHECK", flags);
+
+  if (!flags.accountId || !flags.bucketName || !flags.accessKey || !flags.secretKey || !flags.publicBase) {
+    // wir werfen jetzt mit Detail-Info, welche Variable fehlt
+    throw new Error(
+      `R2 configuration is incomplete on the server: ${JSON.stringify(flags)}`
+    );
   }
 }
 
@@ -32,7 +36,6 @@ export async function uploadToR2(params: {
   body: Buffer;
   contentType: string;
 }) {
-  // Prüfung zur Laufzeit, innerhalb des Funktionsaufrufs
   ensureR2Config();
 
   const client = new S3Client({
