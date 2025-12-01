@@ -127,7 +127,9 @@ export async function POST(req: Request) {
           success: false,
           error: "Failed to save photo metadata in Supabase",
           supabaseError: error.message,
-          supabaseCode: (error as any).code ?? null,
+          supabaseCode: typeof error === "object" && error !== null && "code" in error
+          ? (error as { code: string }).code
+          : null,
         },
         { status: 500 }
       );
