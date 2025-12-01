@@ -61,12 +61,13 @@ export const getStaticProps: GetStaticProps = async (context) => {
 
 export const getStaticPaths: GetStaticPaths = async () => {
   const pageModules = await PLASMIC.fetchPages();
+
   return {
-    paths: pageModules.map((mod) => ({
+    paths: pageModules.map((mod: { path: string }) => ({
       params: {
         catchall: mod.path.substring(1).split("/"),
       },
     })),
     fallback: "blocking",
   };
-}
+};
