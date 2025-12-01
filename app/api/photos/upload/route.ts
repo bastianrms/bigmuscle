@@ -54,9 +54,10 @@ export async function POST(req: Request) {
       },
     } as const;
 
-    async function processAndUploadVariant(
+    // ⬇️ HIER: als const + Arrow Function, nicht als function declaration
+    const processAndUploadVariant = async (
       variant: "xl" | "medium" | "thumb"
-    ): Promise<UploadResult> {
+    ): Promise<UploadResult> => {
       const { width, quality } = VARIANTS[variant];
 
       const processed = await sharp(originalBuffer)
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
       });
 
       return { url, bytes: processed.length };
-    }
+    };
 
     const [xl, medium, thumb] = await Promise.all([
       processAndUploadVariant("xl"),
@@ -113,9 +114,7 @@ export async function POST(req: Request) {
         thumb_url: thumb.url,
         visibility,
         file_size_kb: fileSizeKb,
-        is_profilephoto: isProfilePhoto, // 🔹 neu
-        // moderation_status = default 'pending'
-        // created_at automatisch
+        is_profilephoto: isProfilePhoto,
       })
       .select()
       .single();
@@ -127,9 +126,10 @@ export async function POST(req: Request) {
           success: false,
           error: "Failed to save photo metadata in Supabase",
           supabaseError: error.message,
-          supabaseCode: typeof error === "object" && error !== null && "code" in error
-          ? (error as { code: string }).code
-          : null,
+          supabaseCode:
+            typeof error === "object" && error !== null && "code" in error
+              ? (error as { code: string }).code
+              : null,
         },
         { status: 500 }
       );
