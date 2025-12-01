@@ -19,7 +19,6 @@ export async function POST(req: Request) {
     const visibility =
       (formData.get("visibility") as "public" | "private" | null) ?? "private";
 
-    // 🔹 Neues Flag aus dem Formular
     const isProfilePhoto =
       (formData.get("isProfilePhoto") as string | null) === "true";
 
@@ -27,6 +26,18 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { success: false, error: "Missing file or userId" },
         { status: 400 }
+      );
+    }
+
+    // 🔐 Supabase Admin muss vorhanden sein (auch für TypeScript Narrowing)
+    if (!supabaseAdmin) {
+      console.error("Supabase admin client not configured in /api/photos/upload");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Server misconfigured: Supabase admin client not available",
+        },
+        { status: 500 }
       );
     }
 
@@ -54,7 +65,7 @@ export async function POST(req: Request) {
       },
     } as const;
 
-    // ⬇️ HIER: als const + Arrow Function, nicht als function declaration
+    // ⚠️ Als Funktion-Ausdruck, nicht als Function-Declaration im Block
     const processAndUploadVariant = async (
       variant: "xl" | "medium" | "thumb"
     ): Promise<UploadResult> => {
@@ -90,7 +101,7 @@ export async function POST(req: Request) {
 
     const fileSizeKb = Math.round(xl.bytes / 1024);
 
-    // 🔹 Wenn Profilfoto: alle bisherigen Profilfotos dieses Users auf false setzen
+    // 🔹 Wenn Profilfoto: alte Profilfotos auf false setzen
     if (isProfilePhoto) {
       const { error: clearError } = await supabaseAdmin
         .from("user_photos")
@@ -100,7 +111,7 @@ export async function POST(req: Request) {
 
       if (clearError) {
         console.error("Failed to clear old profile photos:", clearError);
-        // wir brechen hier nicht ab – worst case gibt es einen Konflikt durch den Unique Index
+        // wir brechen hier nicht ab – worst case Unique-Index-Konflikt
       }
     }
 
@@ -121,15 +132,18 @@ export async function POST(req: Request) {
 
     if (error) {
       console.error("Supabase insert error:", error);
+
+      const supabaseCode =
+        typeof error === "object" && error !== null && "code" in error
+          ? (error as { code: string }).code
+          : null;
+
       return NextResponse.json(
         {
           success: false,
           error: "Failed to save photo metadata in Supabase",
           supabaseError: error.message,
-          supabaseCode:
-            typeof error === "object" && error !== null && "code" in error
-              ? (error as { code: string }).code
-              : null,
+          supabaseCode,
         },
         { status: 500 }
       );
