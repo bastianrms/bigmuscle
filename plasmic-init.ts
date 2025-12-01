@@ -14,7 +14,7 @@ import {
 import PhotoUpload from "./components/PhotoUpload";
 import LocationSelect from "./components/LocationSelect";
 
-export const PLASMIC = initPlasmicLoader({
+export const PLASMIC: any = initPlasmicLoader({
   projects: [
     {
       id: "47o2aVEgqSoFh9ckL7WCLR",
