@@ -43,11 +43,9 @@ PLASMIC.registerComponent(
 PLASMIC.registerComponent(PhotoUpload, {
   name: "PhotoUpload",
   displayName: "Photo upload (R2)",
+
   props: {
-    userId: {
-      type: "string",
-      displayName: "User ID",
-    },
+    userId: { type: "string", displayName: "User ID" },
     defaultVisibility: {
       type: "choice",
       options: ["public", "private"],
@@ -56,26 +54,32 @@ PLASMIC.registerComponent(PhotoUpload, {
     },
     buttonText: {
       type: "string",
-      defaultValue: "Upload profile photo",
+      defaultValue: "Upload photo",
       displayName: "Button text",
     },
-    iconUrl: {
-      type: "string",
-      displayName: "Icon URL",
-    },
-    iconSize: {
-      type: "number",
-      defaultValue: 24,
-      displayName: "Icon size (px)",
-    },
-    className: {
-      type: "class",
-    },
+    iconUrl: { type: "string", displayName: "Icon URL" },
+    iconSize: { type: "number", defaultValue: 24, displayName: "Icon size (px)" },
+    className: { type: "class" },
     isProfilePhoto: {
       type: "boolean",
       defaultValue: false,
       displayName: "Is profile photo?",
-      description: "Wenn true, wird dieses Bild als Profilfoto markiert.",
+    },
+  },
+
+  // 🔥 WICHTIG: refActions statt actions
+  refActions: {
+    uploadPhoto: {
+      displayName: "Upload photo",
+      description:
+        "Uploads the selected file to Cloudflare R2 + saves metadata in Supabase.",
+      argTypes: [
+        {
+          name: "userId",
+          type: "string",
+          displayName: "User ID",
+        },
+      ],
     },
   },
 });
