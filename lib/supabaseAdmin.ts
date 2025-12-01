@@ -1,16 +1,23 @@
 // lib/supabaseAdmin.ts
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const url =
+  process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? null;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? null;
 
-if (!supabaseUrl || !serviceRoleKey) {
-  // Wird nur auf dem Server geloggt
-  console.error("Supabase admin config fehlt", {
-    hasUrl: !!supabaseUrl,
-    hasServiceKey: !!serviceRoleKey,
+if (!url || !serviceRoleKey) {
+  // WICHTIG: kein throw mehr – nur loggen
+  console.error("Supabase admin client is not configured", {
+    hasUrl: !!url,
+    hasServiceRoleKey: !!serviceRoleKey,
   });
-  throw new Error("Supabase admin client is not configured");
 }
 
-export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+export const supabaseAdmin: SupabaseClient | null =
+  url && serviceRoleKey
+    ? createClient(url, serviceRoleKey, {
+        auth: {
+          persistSession: false,
+        },
+      })
+    : null;

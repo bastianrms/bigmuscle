@@ -2,6 +2,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { uploadToR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -18,6 +19,10 @@ export async function POST(req: Request) {
     const visibility =
       (formData.get("visibility") as "public" | "private" | null) ?? "private";
 
+    // 🔹 Neues Flag aus dem Formular
+    const isProfilePhoto =
+      (formData.get("isProfilePhoto") as string | null) === "true";
+
     if (!file || !userId) {
       return NextResponse.json(
         { success: false, error: "Missing file or userId" },
@@ -29,38 +34,74 @@ export async function POST(req: Request) {
     const originalArrayBuffer = await file.arrayBuffer();
     const originalBuffer = Buffer.from(originalArrayBuffer);
 
-    // Helper für R2-Upload (du hast ja schon uploadToR2, wir nutzen das)
-    async function uploadVariant(
-      buf: Buffer,
-      suffix: "xl" | "medium" | "thumb",
-      mime: string
+    const baseName = `${userId}/${Date.now()}`;
+
+    const VARIANTS = {
+      xl: {
+        width: 1400,
+        quality: 80,
+        maxKb: 100,
+      },
+      medium: {
+        width: 800,
+        quality: 70,
+        maxKb: 50,
+      },
+      thumb: {
+        width: 400,
+        quality: 60,
+        maxKb: 30,
+      },
+    } as const;
+
+    async function processAndUploadVariant(
+      variant: "xl" | "medium" | "thumb"
     ): Promise<UploadResult> {
-      const ext = "webp"; // wir speichern ja alles als webp
-      const key = `${userId}/${Date.now()}-${suffix}.${ext}`;
+      const { width, quality } = VARIANTS[variant];
+
+      const processed = await sharp(originalBuffer)
+        .resize({
+          width,
+          withoutEnlargement: true,
+        })
+        .webp({
+          quality,
+          effort: 4,
+        })
+        .toBuffer();
+
+      const key = `${baseName}-${variant}.webp`;
 
       const url = await uploadToR2({
         key,
-        body: buf,
-        contentType: mime,
+        body: processed,
+        contentType: "image/webp",
       });
 
-      return { url, bytes: buf.length };
+      return { url, bytes: processed.length };
     }
 
-    // Aktuell: alle drei Varianten noch identisch → später durch sharp-Resizes ersetzen
-    const xlBuffer = originalBuffer;
-    const mediumBuffer = originalBuffer;
-    const thumbBuffer = originalBuffer;
-
-    const mimeType = "image/webp";
-
     const [xl, medium, thumb] = await Promise.all([
-      uploadVariant(xlBuffer, "xl", mimeType),
-      uploadVariant(mediumBuffer, "medium", mimeType),
-      uploadVariant(thumbBuffer, "thumb", mimeType),
+      processAndUploadVariant("xl"),
+      processAndUploadVariant("medium"),
+      processAndUploadVariant("thumb"),
     ]);
 
     const fileSizeKb = Math.round(xl.bytes / 1024);
+
+    // 🔹 Wenn Profilfoto: alle bisherigen Profilfotos dieses Users auf false setzen
+    if (isProfilePhoto) {
+      const { error: clearError } = await supabaseAdmin
+        .from("user_photos")
+        .update({ is_profilephoto: false })
+        .eq("user_id", userId)
+        .eq("is_profilephoto", true);
+
+      if (clearError) {
+        console.error("Failed to clear old profile photos:", clearError);
+        // wir brechen hier nicht ab – worst case gibt es einen Konflikt durch den Unique Index
+      }
+    }
 
     // ----- Supabase-Insert -----
     const { data, error } = await supabaseAdmin
@@ -72,8 +113,9 @@ export async function POST(req: Request) {
         thumb_url: thumb.url,
         visibility,
         file_size_kb: fileSizeKb,
-        // moderation_status bleibt default 'pending'
-        // created_at wird von Supabase automatisch gesetzt
+        is_profilephoto: isProfilePhoto, // 🔹 neu
+        // moderation_status = default 'pending'
+        // created_at automatisch
       })
       .select()
       .single();
