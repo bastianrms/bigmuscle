@@ -9,11 +9,12 @@ import Image from "next/image";
 
 // ---- Exportierte Actions für Plasmic ----
 export type PhotoUploadActions = {
-  uploadPhoto: (userId: string) => Promise<void>;
+  // userId kann aus der Action kommen – oder aus den Props
+  uploadPhoto: (userIdFromAction?: string) => Promise<void>;
 };
 
 type Props = {
-  userId?: string; // optional – finaler userId kommt aus Plasmic-Action
+  userId?: string; // optionaler Fallback
   defaultVisibility?: "public" | "private";
 
   buttonText?: string;
@@ -27,7 +28,7 @@ type Props = {
 const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
   (
     {
-      userId,
+      userId, // ⚡ wird jetzt wirklich verwendet
       defaultVisibility = "private",
       buttonText = "Upload photo",
       iconUrl = null,
@@ -38,17 +39,15 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
     ref
   ) => {
     const [fileToUpload, setFileToUpload] = useState<File | null>(null);
-
     const [isDragging, setIsDragging] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Preview: lokales URL-Objekt
+    // Preview: lokales URL-Objekt oder echte URL vom Backend
     const [imageUrl, setImageUrl] = useState<string | null>(null);
 
     /**
-     * ---- CORE-UPLOAD-FUNKTION ----
-     * Kann von innen (onChange) UND von außen (Plasmic Run Action) aufgerufen werden.
+     * CORE-UPLOAD: wird von uploadPhoto() aufgerufen
      */
     async function uploadFile(file: File, uid: string) {
       setError(null);
@@ -72,7 +71,7 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
           throw new Error(json.error || "Upload failed");
         }
 
-        // Backend has returned real URLs → override preview
+        // Backend-URLs überschreiben die lokale Preview
         setImageUrl(json.medium_url || json.xl_url || null);
       } catch (err) {
         console.error(err);
@@ -83,36 +82,42 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
     }
 
     /**
-     * ---- Handle für Plasmic: uploadPhoto() ----
-     * Wird im On-submit per "Run element action" ausgeführt.
+     * Handle für Plasmic: uploadPhoto()
+     * Kann userId aus der Action ODER aus den Props nutzen.
      */
     useImperativeHandle(ref, () => ({
-      async uploadPhoto(finalUserId: string) {
+      async uploadPhoto(userIdFromAction?: string) {
+        const uid = userIdFromAction ?? userId;
+
         if (!fileToUpload) {
           console.warn("[PhotoUpload.uploadPhoto] No file selected.");
           return;
         }
-        await uploadFile(fileToUpload, finalUserId);
+
+        if (!uid) {
+          console.warn("[PhotoUpload.uploadPhoto] No userId provided.");
+          return;
+        }
+
+        await uploadFile(fileToUpload, uid);
       },
     }));
 
     /**
-     * ---- LOCAL: Datei auswählen → sofort Preview, aber noch kein Upload ----
+     * Datei auswählen → sofort Preview, aber noch kein Upload
      */
     function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      // Datei merken für später
       setFileToUpload(file);
 
-      // Sofort-Preview (Browser-URL)
       const localPreview = URL.createObjectURL(file);
       setImageUrl(localPreview);
     }
 
     /**
-     * ---- DRAG & DROP ----
+     * Drag & Drop
      */
     function handleDrop(e: React.DragEvent<HTMLLabelElement>) {
       e.preventDefault();
@@ -181,9 +186,7 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
         {/* Preview */}
         {imageUrl && (
           <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: "0.8rem", marginBottom: 4 }}>
-              Preview:
-            </div>
+            <div style={{ fontSize: "0.8rem", marginBottom: 4 }}>Preview:</div>
             <Image
               src={imageUrl}
               alt="Uploaded preview"
