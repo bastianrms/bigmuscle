@@ -25,12 +25,6 @@ export const PLASMIC: any = initPlasmicLoader({
   preview: true,
 });
 
-// Code-Component-Registrierungen bündeln
-import { registerLoginController } from "./plasmic-inits/code-login-controller";
-
-// einmalig alle registrieren
-registerLoginController(PLASMIC);
-
 // Global context
 PLASMIC.registerGlobalContext(
   SupabaseUserGlobalContext,
