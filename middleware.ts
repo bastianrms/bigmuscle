@@ -10,7 +10,8 @@ const loginPage = '/'
 const publicRoutes = [
   '/',
   '/signup',
-  '/plasmic-host'
+  '/plasmic-host',
+  '/request-passwordreset'
 ]
 
 // Middleware function
