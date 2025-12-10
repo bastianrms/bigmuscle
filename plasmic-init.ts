@@ -23,7 +23,8 @@ export const PLASMIC: any = initPlasmicLoader({
         "AXnSKzhIhcP0uoUs9GOCNEAMNpVyOU3iFUvJOVWzhBX6uZPjK5JSrarnzVAc041Af8nGULs8RL0edYcFXQ",
     },
   ],
-  preview: true,
+  // in Prod unbedingt false:
+  preview: process.env.NODE_ENV === "development"
 });
 
 // Global context
