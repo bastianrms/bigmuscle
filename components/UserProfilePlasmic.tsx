@@ -10,7 +10,7 @@ import { PLASMIC } from "../plasmic-init";
 
 export default function UserProfilePlasmic() {
   const router = useRouter();
-  const { user_id, ...restQuery } = router.query;
+  const { user_id } = router.query;
 
   if (!user_id || typeof user_id !== "string") {
     return null; // optional Loader
