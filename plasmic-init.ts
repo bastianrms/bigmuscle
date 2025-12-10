@@ -13,6 +13,7 @@ import {
 // Code Components
 import PhotoUpload from "./components/PhotoUpload";
 import LocationSelect from "./components/LocationSelect";
+import { registerChatMessageInput } from "./components-register/ChatMessageInput.register";
 
 export const PLASMIC: any = initPlasmicLoader({
   projects: [
@@ -185,3 +186,6 @@ PLASMIC.registerComponent(LocationSelect, {
     },
   },
 } satisfies any);
+
+// ChatMessageInput
+registerChatMessageInput(PLASMIC);

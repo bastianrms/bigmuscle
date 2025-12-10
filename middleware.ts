@@ -11,8 +11,11 @@ const publicRoutes = [
   '/',
   '/signup',
   '/plasmic-host',
-  '/request-passwordreset'
-]
+  '/confirmemail',
+  '/signup-confirmed',
+  '/request-passwordreset',
+  '/passwordreset'       // ← NEU: Passwort-Reset-Seite muss auch ohne Login erreichbar sein
+];
 
 // Middleware function
 // This will run on every request to your app that matches the pattern at the bottom of this file
