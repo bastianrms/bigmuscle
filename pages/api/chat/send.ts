@@ -121,7 +121,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       chat_user: chatUserRow,
       message: messageRow,
     });
-  } catch (e: any) {
-    return res.status(500).json({ error: e?.message ?? "Server error" });
-  }
+  } catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : String(e);
+  return res.status(500).json({ error: msg });
+}
 }

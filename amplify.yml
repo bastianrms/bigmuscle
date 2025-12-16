@@ -15,7 +15,6 @@ frontend:
 
         # optional nur zur Kontrolle:
         - echo "[INFO] .env.production content:"
-        - cat .env.production
 
         - npm run build
   artifacts:

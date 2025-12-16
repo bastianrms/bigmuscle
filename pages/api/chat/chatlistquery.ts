@@ -118,7 +118,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     return res.status(200).json({ items });
-  } catch (e: any) {
-    return res.status(500).json({ error: e?.message ?? "Unknown error" });
+    } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return res.status(500).json({ error: msg });
   }
 }

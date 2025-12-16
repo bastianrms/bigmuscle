@@ -78,6 +78,8 @@ export function ChatListData(props: {
     };
   }, [endpoint, inStudio]);
 
+    void error;
+
   return (
     <DataProvider name={dataName} data={items}>
       {children}
