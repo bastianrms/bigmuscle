@@ -2,6 +2,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createServerClient } from "@supabase/ssr";
 import { parse, serialize } from "cookie";
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Parameters<typeof serialize>[2];
+};
 
 function getSupabaseServerClient(req: NextApiRequest, res: NextApiResponse) {
   return createServerClient(
@@ -14,13 +19,13 @@ function getSupabaseServerClient(req: NextApiRequest, res: NextApiResponse) {
             ([name, value]) => ({ name, value })
           );
         },
-        setAll(cookies: any[]) {
-          cookies.forEach(({ name, value, options }) => {
-            res.setHeader(
-              "Set-Cookie",
-              serialize(name, value, {
-                ...options,
-                path: "/",
+       setAll(cookies: CookieToSet[]) {
+         cookies.forEach(({ name, value, options }) => {
+           res.setHeader(
+             "Set-Cookie",
+             serialize(name, value, {
+               ...options,
+               path: "/",
               })
             );
           });

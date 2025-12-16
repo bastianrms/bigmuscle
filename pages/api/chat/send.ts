@@ -1,25 +1,30 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createServerClient } from "@supabase/ssr";
 import { parse, serialize } from "cookie";
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Parameters<typeof serialize>[2];
+};
 
 function getSupabaseServerClient(req: NextApiRequest, res: NextApiResponse) {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // wichtig: für session-cookie auth
     {
-      cookies: {
-        getAll() {
-          return Object.entries(parse(req.headers.cookie || "")).map(
-            ([name, value]) => ({ name, value })
-          );
-        },
-        setAll(cookies: any[]) {
-          cookies.forEach(({ name, value, options }) => {
-            res.setHeader(
-              "Set-Cookie",
-              serialize(name, value, {
-                ...options,
-                path: "/",
+  cookies: {
+  getAll() {
+    return Object.entries(parse(req.headers.cookie || "")).map(
+      ([name, value]) => ({ name, value })
+    );
+  },
+  setAll(cookies: CookieToSet[]) {
+    cookies.forEach(({ name, value, options }) => {
+      res.setHeader(
+        "Set-Cookie",
+        serialize(name, value, {
+          ...options,
+          path: "/",
               })
             );
           });
