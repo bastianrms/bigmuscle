@@ -14,7 +14,7 @@ function getSupabaseServerClient(req: NextApiRequest, res: NextApiResponse) {
             ([name, value]) => ({ name, value })
           );
         },
-        setAll(cookies) {
+        setAll(cookies: any[]) {
           cookies.forEach(({ name, value, options }) => {
             res.setHeader(
               "Set-Cookie",
