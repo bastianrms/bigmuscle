@@ -5,6 +5,10 @@ export function registerChatMessageInput(PLASMIC: any) {
   PLASMIC.registerComponent(ChatMessageInput, {
     name: "ChatMessageInput",
     displayName: "Chat message input",
+
+    // ✅ Pflicht für CLI sync / import fixing
+    importPath: "../components/ChatMessageInput",
+
     props: {
       value: {
         type: "string",

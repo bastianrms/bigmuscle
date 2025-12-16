@@ -14,6 +14,8 @@ import {
 import PhotoUpload from "./components/PhotoUpload";
 import LocationSelect from "./components/LocationSelect";
 import { registerChatMessageInput } from "./components-register/ChatMessageInput.register";
+import { registerLazyMount } from "./components-register/LazyMount.register";
+import { registerChatListData } from "./components-register/ChatListData.register";
 
 export const PLASMIC: any = initPlasmicLoader({
   projects: [
@@ -23,8 +25,9 @@ export const PLASMIC: any = initPlasmicLoader({
         "AXnSKzhIhcP0uoUs9GOCNEAMNpVyOU3iFUvJOVWzhBX6uZPjK5JSrarnzVAc041Af8nGULs8RL0edYcFXQ",
     },
   ],
-  // in Prod unbedingt false:
-  preview: process.env.NODE_ENV === "development"
+
+// Expliziter Preview-Schalter
+preview: process.env.PLASMIC_PREVIEW === "true"
 });
 
 // Global context
@@ -45,6 +48,9 @@ PLASMIC.registerComponent(
 PLASMIC.registerComponent(PhotoUpload, {
   name: "PhotoUpload",
   displayName: "Photo upload (R2)",
+
+  // ✅ DAS ist der entscheidende Fix
+  importPath: "./components/PhotoUpload",
 
   props: {
     userId: { type: "string", displayName: "User ID" },
@@ -90,6 +96,8 @@ PLASMIC.registerComponent(PhotoUpload, {
 PLASMIC.registerComponent(LocationSelect, {
   name: "LocationSelect",
   displayName: "Location select (country + city)",
+  importPath: "./components/LocationSelect",
+
   props: {
     labelCountry: {
       type: "string",
@@ -190,3 +198,8 @@ PLASMIC.registerComponent(LocationSelect, {
 
 // ChatMessageInput
 registerChatMessageInput(PLASMIC);
+
+// LazyMount
+registerLazyMount(PLASMIC);
+
+registerChatListData(PLASMIC);
