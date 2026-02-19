@@ -13,15 +13,18 @@ export type ChatMessageInputProps = {
   minRows?: number;
   maxRows?: number;
 
+  // ✅ neu: HTML id für die Textarea (für focus per Button)
+  textareaId?: string;
+
   // Styling-Props (hierarchisch)
   // A. Ganz außen
-  wrapperClassName?: string;   // A. Root wrapper
+  wrapperClassName?: string; // A. Root wrapper
   // B. Außenrahmen (z.B. Flex, Border, Background)
-  outerClassName?: string;     // B. Outer wrapper
+  outerClassName?: string; // B. Outer wrapper
   // C. Innerer Wrapper direkt um Textarea
-  innerClassName?: string;     // C. Inner wrapper
+  innerClassName?: string; // C. Inner wrapper
   // D. Textarea selbst
-  textareaClassName?: string;  // D. Textarea (Text, Placeholder, Padding)
+  textareaClassName?: string; // D. Textarea (Text, Placeholder, Padding)
 };
 
 export function ChatMessageInput(props: ChatMessageInputProps) {
@@ -33,6 +36,7 @@ export function ChatMessageInput(props: ChatMessageInputProps) {
     autoFocus,
     minRows = 1,
     maxRows = 5,
+    textareaId,
     wrapperClassName,
     outerClassName,
     innerClassName,
@@ -60,6 +64,7 @@ export function ChatMessageInput(props: ChatMessageInputProps) {
       <div className={outerClassName}>
         <div className={innerClassName}>
           <textarea
+            id={textareaId} // ✅ neu
             ref={textareaRef}
             className={textareaClassName}
             value={value}

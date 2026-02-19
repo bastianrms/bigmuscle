@@ -1,20 +1,22 @@
+// components/PhotoUpload.tsx
 "use client";
 
-import React, {
-  useState,
-  forwardRef,
-  useImperativeHandle,
-} from "react";
+import React, { useId, useState, forwardRef, useImperativeHandle } from "react";
 import Image from "next/image";
 
-// ---- Exportierte Actions für Plasmic ----
 export type PhotoUploadActions = {
-  // userId kann aus der Action kommen – oder aus den Props
-  uploadPhoto: (userIdFromAction?: string) => Promise<void>;
+  uploadPhoto: (
+    userIdFromAction?: string,
+    captionFromAction?: string,
+    visibilityFromAction?: "public" | "private"
+  ) => Promise<void>;
+
+  hasSelectedFile: () => boolean;
+  reset: () => void;
 };
 
 type Props = {
-  userId?: string; // optionaler Fallback
+  userId?: string; // optional
   defaultVisibility?: "public" | "private";
 
   buttonText?: string;
@@ -23,102 +25,187 @@ type Props = {
 
   className?: string;
   isProfilePhoto?: boolean;
+
+  // wie lange success=true bleiben soll (ms)
+  successMs?: number;
+
+  // falls du mehrere Uploads auf einer Seite hast
+  scope?: string; // default "default"
+};
+
+type UploadStateEvent = {
+  scope: string;
+  success?: boolean;
+  isUploading?: boolean;
+  error?: string | null;
+  imageUrl?: string | null;
+};
+
+type UploadApiResponse = {
+  success?: boolean;
+  error?: string;
+  url?: string;
+  bytes?: number;
+  thumb_url?: string | null;
+  medium_url?: string | null;
+  xl_url?: string | null;
 };
 
 const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
   (
     {
-      userId, // ⚡ wird jetzt wirklich verwendet
+      userId,
       defaultVisibility = "private",
       buttonText = "Upload photo",
       iconUrl = null,
       iconSize = 24,
       className,
       isProfilePhoto = false,
+      successMs = 4000,
+      scope = "default",
     },
     ref
   ) => {
+    const inputId = useId(); // ✅ fixes id-collisions in Plasmic / multiple instances
+
     const [fileToUpload, setFileToUpload] = useState<File | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
-    // Preview: lokales URL-Objekt oder echte URL vom Backend
+    const [error, setError] = useState<string | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
 
-    /**
-     * CORE-UPLOAD: wird von uploadPhoto() aufgerufen
-     */
-    async function uploadFile(file: File, uid: string) {
+    function emitState(next: Omit<UploadStateEvent, "scope">) {
+      if (typeof window === "undefined") return;
+      window.dispatchEvent(
+        new CustomEvent<UploadStateEvent>("photoUpload:state", {
+          detail: { scope, ...next },
+        })
+      );
+    }
+
+    async function uploadFile(
+      file: File,
+      uidMaybe: string,
+      caption: string,
+      visibility: "public" | "private"
+    ) {
       setError(null);
       setIsUploading(true);
+      emitState({ error: null, success: false, isUploading: true });
 
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("userId", uid);
-      formData.append("visibility", defaultVisibility);
+
+      // userId optional (Server nimmt auth user)
+      if (uidMaybe) formData.append("userId", uidMaybe);
+
+      formData.append("visibility", visibility);
+      formData.append("caption", caption ?? "");
       formData.append("isProfilePhoto", String(isProfilePhoto));
 
       try {
         const res = await fetch("/api/photos/upload", {
           method: "POST",
           body: formData,
+          credentials: "include",
         });
 
-        const json = await res.json();
+        const json = (await res.json()) as UploadApiResponse;
 
-        if (!res.ok || !json.success) {
-          throw new Error(json.error || "Upload failed");
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || "Upload failed");
         }
 
-        // Backend-URLs überschreiben die lokale Preview
-        setImageUrl(json.medium_url || json.xl_url || null);
-      } catch (err) {
+        const nextUrl: string | null =
+          json.medium_url ?? json.xl_url ?? json.thumb_url ?? null;
+
+        setImageUrl(nextUrl);
+        setIsUploading(false);
+
+        emitState({
+          success: true,
+          isUploading: false,
+          error: null,
+          imageUrl: nextUrl,
+        });
+
+        if (successMs > 0) {
+          window.setTimeout(() => {
+            emitState({ success: false });
+          }, successMs);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Upload failed";
         console.error(err);
-        setError(err instanceof Error ? err.message : "Upload failed");
+
+        setError(msg);
+        setIsUploading(false);
+
+        emitState({ error: msg, success: false, isUploading: false });
       } finally {
         setIsUploading(false);
+        emitState({ isUploading: false });
       }
     }
 
-    /**
-     * Handle für Plasmic: uploadPhoto()
-     * Kann userId aus der Action ODER aus den Props nutzen.
-     */
     useImperativeHandle(ref, () => ({
-      async uploadPhoto(userIdFromAction?: string) {
-        const uid = userIdFromAction ?? userId;
+      async uploadPhoto(
+        userIdFromAction?: string,
+        captionFromAction?: string,
+        visibilityFromAction?: "public" | "private"
+      ) {
+        const uidMaybe = (userIdFromAction ?? userId ?? "").trim();
+        const caption = (captionFromAction ?? "").trim();
+        const visibility = visibilityFromAction ?? defaultVisibility;
 
         if (!fileToUpload) {
-          console.warn("[PhotoUpload.uploadPhoto] No file selected.");
+          const msg = "Please select a photo first.";
+          setError(msg);
+          emitState({ error: msg, success: false });
           return;
         }
 
-        if (!uid) {
-          console.warn("[PhotoUpload.uploadPhoto] No userId provided.");
-          return;
-        }
+        if (isUploading) return;
 
-        await uploadFile(fileToUpload, uid);
+        await uploadFile(fileToUpload, uidMaybe, caption, visibility);
+      },
+
+      hasSelectedFile() {
+        return !!fileToUpload;
+      },
+
+      reset() {
+        setFileToUpload(null);
+        setImageUrl(null);
+        setError(null);
+        setIsUploading(false);
+
+        emitState({
+          success: false,
+          isUploading: false,
+          error: null,
+          imageUrl: null,
+        });
       },
     }));
 
-    /**
-     * Datei auswählen → sofort Preview, aber noch kein Upload
-     */
     function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      setFileToUpload(file);
+      const previewUrl = URL.createObjectURL(file);
 
-      const localPreview = URL.createObjectURL(file);
-      setImageUrl(localPreview);
+      setFileToUpload(file);
+      setImageUrl(previewUrl);
+      setError(null);
+
+      emitState({ imageUrl: previewUrl, error: null, success: false });
+
+      // ✅ allow re-selecting the same file again later
+      e.target.value = "";
     }
 
-    /**
-     * Drag & Drop
-     */
     function handleDrop(e: React.DragEvent<HTMLLabelElement>) {
       e.preventDefault();
       setIsDragging(false);
@@ -126,16 +213,19 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
       const file = e.dataTransfer.files?.[0];
       if (!file) return;
 
+      const previewUrl = URL.createObjectURL(file);
+
       setFileToUpload(file);
-      const localPreview = URL.createObjectURL(file);
-      setImageUrl(localPreview);
+      setImageUrl(previewUrl);
+      setError(null);
+
+      emitState({ imageUrl: previewUrl, error: null, success: false });
     }
 
     return (
       <div className={className}>
-        {/* Hidden File Input */}
         <input
-          id="bm-photo-input"
+          id={inputId}
           type="file"
           accept="image/*"
           onChange={handleSelect}
@@ -143,9 +233,8 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
           disabled={isUploading}
         />
 
-        {/* Styled Button / Dropzone */}
         <label
-          htmlFor="bm-photo-input"
+          htmlFor={inputId}
           className={`bm-photo-upload-button ${isDragging ? "dragging" : ""}`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -176,14 +265,12 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
           </span>
         </label>
 
-        {/* Error */}
         {error && (
           <div style={{ color: "red", marginTop: 8, fontSize: "0.9rem" }}>
             {error}
           </div>
         )}
 
-        {/* Preview */}
         {imageUrl && (
           <div style={{ marginTop: 12 }}>
             <div style={{ fontSize: "0.8rem", marginBottom: 4 }}>Preview:</div>
@@ -192,10 +279,7 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
               alt="Uploaded preview"
               width={200}
               height={200}
-              style={{
-                objectFit: "cover",
-                borderRadius: 12,
-              }}
+              style={{ objectFit: "cover", borderRadius: 12 }}
             />
           </div>
         )}
@@ -205,5 +289,4 @@ const PhotoUpload = forwardRef<PhotoUploadActions, Props>(
 );
 
 PhotoUpload.displayName = "PhotoUpload";
-
 export default PhotoUpload;

@@ -15,7 +15,21 @@ type Props = {
   placeholderCountry?: string;
   placeholderCity?: string;
 
-  // Nur Styling / Layout
+  // Prefill (Account Settings)
+  initialCountryName?: string | null;
+  initialCountryCode?: string | null;
+  initialCityName?: string | null;
+  initialCityGeonameId?: number | null;
+
+  // Change callback (Account Settings)
+  onChangeLocation?: (loc: {
+    country: string | null;
+    city: string | null;
+    country_code: string | null;
+    city_geoname_id: number | null;
+  }) => void;
+
+  // Styling
   wrapperClassName?: string;
   fieldWrapperClassName?: string;
   innerWrapperClassName?: string;
@@ -37,11 +51,19 @@ type CityRow = {
   geoname_id: number;
   name: string;
   ascii_name: string | null;
+  population?: number | null;
 };
 
 export type LocationSelectActions = {
+  // Für Profile Setup (bleibt!)
   saveLocation: (userId: string) => Promise<void>;
 };
+
+function normStrOrNull(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const t = String(v).trim();
+  return t.length ? t : null;
+}
 
 const LocationSelect = forwardRef<LocationSelectActions, Props>(
   (
@@ -50,6 +72,14 @@ const LocationSelect = forwardRef<LocationSelectActions, Props>(
       labelCity = "City",
       placeholderCountry = "Select country…",
       placeholderCity = "Start typing a city…",
+
+      initialCountryName,
+      initialCountryCode,
+      initialCityName,
+      initialCityGeonameId,
+
+      onChangeLocation,
+
       wrapperClassName,
       fieldWrapperClassName,
       innerWrapperClassName,
@@ -65,93 +95,109 @@ const LocationSelect = forwardRef<LocationSelectActions, Props>(
   ) => {
     const [countries, setCountries] = useState<CountryRow[]>([]);
     const [countryInput, setCountryInput] = useState("");
-    const [countrySuggestions, setCountrySuggestions] = useState<CountryRow[]>(
-      []
-    );
+    const [countrySuggestions, setCountrySuggestions] = useState<CountryRow[]>([]);
 
-    // was der Nutzer letztlich "gewählt" hat
-    const [selectedCountryCode, setSelectedCountryCode] = useState<
-      string | null
-    >(null);
-    const [selectedCountryName, setSelectedCountryName] = useState<
-      string | null
-    >(null);
+    const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
+    const [selectedCountryName, setSelectedCountryName] = useState<string | null>(null);
 
     const [cityInput, setCityInput] = useState("");
     const [citySuggestions, setCitySuggestions] = useState<CityRow[]>([]);
 
-    // "schöne" Stadt + technische ID
-    const [selectedCityName, setSelectedCityName] = useState<string | null>(
-      null
-    );
-    const [selectedCityGeonameId, setSelectedCityGeonameId] = useState<
-      number | null
-    >(null);
+    const [selectedCityName, setSelectedCityName] = useState<string | null>(null);
+    const [selectedCityGeonameId, setSelectedCityGeonameId] = useState<number | null>(null);
 
     const [isLoadingCities, setIsLoadingCities] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const cityInputRef = useRef<HTMLInputElement | null>(null);
 
-    // Länder laden
+    function emitChange(
+      next?: Partial<{
+        country: string | null;
+        city: string | null;
+        country_code: string | null;
+        city_geoname_id: number | null;
+      }>
+    ) {
+      if (!onChangeLocation) return;
+
+      onChangeLocation({
+        country: (next?.country ?? selectedCountryName) ?? null,
+        city: (next?.city ?? selectedCityName) ?? null,
+        country_code: (next?.country_code ?? selectedCountryCode) ?? null,
+        city_geoname_id: (next?.city_geoname_id ?? selectedCityGeonameId) ?? null,
+      });
+    }
+
+    // ✅ Prefill (Account Settings)
+    // Wichtig: nur wenn Props gesetzt sind (undefined bedeutet: nichts anfassen)
+    useEffect(() => {
+      if (initialCountryName !== undefined) {
+        const v = normStrOrNull(initialCountryName);
+        setCountryInput(v ?? "");
+        setSelectedCountryName(v);
+      }
+      if (initialCountryCode !== undefined) {
+        setSelectedCountryCode(normStrOrNull(initialCountryCode));
+      }
+      if (initialCityName !== undefined) {
+        const v = normStrOrNull(initialCityName);
+        setCityInput(v ?? "");
+        setSelectedCityName(v);
+      }
+      if (initialCityGeonameId !== undefined) {
+        setSelectedCityGeonameId(
+          typeof initialCityGeonameId === "number" ? initialCityGeonameId : null
+        );
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialCountryName, initialCountryCode, initialCityName, initialCityGeonameId]);
+
+    // ✅ Countries load
     useEffect(() => {
       async function loadCountries() {
-        if (!supabaseClient) {
-          console.error("supabaseClient not configured");
-          return;
-        }
-        const { data, error } = await supabaseClient
-          .from("countries")
-          .select("code, name_en")
-          .order("name_en", { ascending: true });
+        try {
+          setError(null);
+          if (!supabaseClient) return;
 
-        if (error) {
-          console.error("Error loading countries", error);
+          const { data, error } = await supabaseClient
+            .from("countries")
+            .select("code, name_en")
+            .order("name_en", { ascending: true });
+
+          if (error) {
+            setError("Could not load countries");
+            return;
+          }
+
+          const rows = (data ?? []) as CountryRow[];
+          setCountries(
+            rows.map((row) => ({
+              code: row.code,
+              name_en: row.name_en ?? row.code,
+            }))
+          );
+        } catch {
           setError("Could not load countries");
-          return;
         }
-
-        setCountries(
-          (data ?? []).map((row) => ({
-            code: row.code,
-            name_en: row.name_en ?? row.code,
-          }))
-        );
       }
 
       loadCountries();
     }, []);
 
-    // 👉 Action für Plasmic: wird vom Button via „Run element action“ getriggert
+    // ✅ Action für Profile Setup (bleibt!)
     useImperativeHandle(
       ref,
       () => ({
         async saveLocation(userId: string) {
-          console.log("[LocationSelect.saveLocation] called with:", {
-            userId,
-            selectedCountryCode,
-            selectedCountryName,
-            selectedCityName,
-            selectedCityGeonameId,
-          });
-
-          if (!supabaseClient) {
-            console.error("[LocationSelect.saveLocation] supabaseClient missing");
-            return;
-          }
-          if (!userId) {
-            console.warn("[LocationSelect.saveLocation] no userId passed");
-            return;
-          }
+          if (!supabaseClient) return;
+          if (!userId) return;
 
           const { error } = await supabaseClient
             .from("users")
             .update({
-              // “schöne” Labels
               country: selectedCountryName ?? null,
               city: selectedCityName ?? null,
-
-              // technische Felder für FK / Geo
               country_code: selectedCountryCode ?? null,
               city_geoname_id: selectedCityGeonameId,
             })
@@ -159,33 +205,55 @@ const LocationSelect = forwardRef<LocationSelectActions, Props>(
 
           if (error) {
             console.error("[LocationSelect.saveLocation] update failed:", error);
-          } else {
-            console.log("[LocationSelect.saveLocation] update OK ✅");
           }
         },
       }),
-      [
-        selectedCountryCode,
-        selectedCountryName,
-        selectedCityName,
-        selectedCityGeonameId,
-      ]
+      [selectedCountryCode, selectedCountryName, selectedCityName, selectedCityGeonameId]
     );
 
-    // Country input change (Tippen)
     function handleCountryChangeInput(e: React.ChangeEvent<HTMLInputElement>) {
       const value = e.target.value;
       setCountryInput(value);
 
-      // wir merken uns den Label-Wert (falls Nutzer nicht auf Dropdown klickt)
-      setSelectedCountryName(value || null);
+      // Wenn leer -> alles löschen + emitChange sofort
+      if (!value.trim()) {
+        setSelectedCountryName(null);
+        setSelectedCountryCode(null);
 
-      // Stadt resetten, Code resetten
+        setSelectedCityName(null);
+        setSelectedCityGeonameId(null);
+        setCityInput("");
+        setCitySuggestions([]);
+        setCountrySuggestions([]);
+
+        // country/country_code auch null senden
+        onChangeLocation?.({
+          country: null,
+          country_code: null,
+          city: null,
+          city_geoname_id: null,
+        });
+
+        return;
+      }
+
+      // Tippen: Name setzen, Code reset
+      setSelectedCountryName(value);
       setSelectedCountryCode(null);
+
+      // City reset
       setSelectedCityName(null);
       setSelectedCityGeonameId(null);
       setCityInput("");
       setCitySuggestions([]);
+
+      // Event raus
+      onChangeLocation?.({
+        country: value,
+        country_code: null,
+        city: null,
+        city_geoname_id: null,
+      });
 
       if (value.trim().length < 2) {
         setCountrySuggestions([]);
@@ -195,70 +263,90 @@ const LocationSelect = forwardRef<LocationSelectActions, Props>(
       const lower = value.toLowerCase();
       const matches = countries
         .filter((c) => (c.name_en ?? c.code).toLowerCase().startsWith(lower))
-        .slice(0, 5);
+        .slice(0, 8);
 
       setCountrySuggestions(matches);
     }
 
-    // Country suggestion select
     function handleCountrySelect(country: CountryRow) {
       const displayName = country.name_en ?? country.code;
 
       setCountryInput(displayName);
-      setSelectedCountryCode(country.code);
       setSelectedCountryName(displayName);
+      setSelectedCountryCode(country.code);
       setCountrySuggestions([]);
 
-      // City reset
+      // reset city selection
+      setCityInput("");
       setSelectedCityName(null);
       setSelectedCityGeonameId(null);
-      setCityInput("");
       setCitySuggestions([]);
 
-      if (cityInputRef.current) {
-        cityInputRef.current.focus();
-      }
+      emitChange({
+        country: displayName,
+        country_code: country.code,
+        city: null,
+        city_geoname_id: null,
+      });
+
+      cityInputRef.current?.focus();
     }
 
-    // City input change mit Supabase-Abfrage
     async function handleCityChangeInput(e: React.ChangeEvent<HTMLInputElement>) {
       const value = e.target.value;
       setCityInput(value);
-      setSelectedCityName(value || null);
+
+      if (!value.trim()) {
+        setSelectedCityName(null);
+        setSelectedCityGeonameId(null);
+        setCitySuggestions([]);
+
+        onChangeLocation?.({
+          country: selectedCountryName ?? null,
+          country_code: selectedCountryCode ?? null,
+          city: null,
+          city_geoname_id: null,
+        });
+
+        return;
+      }
+
+      setSelectedCityName(value);
       setSelectedCityGeonameId(null);
       setCitySuggestions([]);
 
-      if (!selectedCountryCode) {
-        return;
-      }
-      if (value.trim().length < 2) {
-        return;
-      }
-      if (!supabaseClient) {
-        console.error("supabaseClient not configured");
-        return;
-      }
+      onChangeLocation?.({
+        country: selectedCountryName ?? null,
+        country_code: selectedCountryCode ?? null,
+        city: value,
+        city_geoname_id: null,
+      });
+
+      if (!selectedCountryCode) return;
+      if (value.trim().length < 2) return;
+      if (!supabaseClient) return;
 
       try {
         setIsLoadingCities(true);
-        const prefix = value.trim();
+        setError(null);
 
+        const prefix = value.trim();
         const { data, error } = await supabaseClient
           .from("world_cities")
           .select("geoname_id, name, ascii_name")
           .eq("country_code", selectedCountryCode)
           .or(`ascii_name.ilike.${prefix}%,name.ilike.${prefix}%`)
           .order("population", { ascending: false })
-          .limit(5);
+          .limit(8);
 
         if (error) {
-          console.error("Error loading cities", error);
           setError("Could not load cities");
           return;
         }
 
+        const rows = (data ?? []) as CityRow[];
         setCitySuggestions(
-          (data ?? []).map((row) => ({
+          rows.map((row) => ({
             geoname_id: row.geoname_id,
             name: row.name,
             ascii_name: row.ascii_name,
@@ -269,23 +357,26 @@ const LocationSelect = forwardRef<LocationSelectActions, Props>(
       }
     }
 
-    // City suggestion select
     function handleCitySelect(city: CityRow) {
       const displayName = city.ascii_name ?? city.name;
 
       setCityInput(displayName);
-      setSelectedCityName(city.name); // “echter” Name
+      setSelectedCityName(city.name);
       setSelectedCityGeonameId(city.geoname_id);
       setCitySuggestions([]);
+
+      emitChange({
+        city: city.name,
+        city_geoname_id: city.geoname_id,
+      });
     }
 
     return (
       <div className={wrapperClassName}>
         {/* COUNTRY */}
         <div className={fieldWrapperClassName}>
-          {labelCountry && (
-            <label className={labelClassName}>{labelCountry}</label>
-          )}
+          {labelCountry && <label className={labelClassName}>{labelCountry}</label>}
+
           <div className={innerWrapperClassName}>
             <input
               type="text"
@@ -295,6 +386,7 @@ const LocationSelect = forwardRef<LocationSelectActions, Props>(
               className={inputClassName}
               autoComplete="off"
             />
+
             {countrySuggestions.length > 0 && (
               <div className={suggestionsContainerClassName}>
                 <ul className={suggestionListClassName}>
@@ -319,35 +411,34 @@ const LocationSelect = forwardRef<LocationSelectActions, Props>(
         {/* CITY */}
         <div className={fieldWrapperClassName}>
           {labelCity && <label className={labelClassName}>{labelCity}</label>}
+
           <div className={innerWrapperClassName}>
             <input
               ref={cityInputRef}
               type="text"
               value={cityInput}
               onChange={handleCityChangeInput}
-              placeholder={
-                selectedCountryCode ? placeholderCity : "Select a country first…"
-              }
+              placeholder={selectedCountryCode ? placeholderCity : "Select a country first…"}
               className={inputClassName}
               autoComplete="off"
               disabled={!selectedCountryCode}
             />
-            {isLoadingCities && (
-              <div className={helperTextClassName}>Loading…</div>
-            )}
+
+            {isLoadingCities && <div className={helperTextClassName}>Loading…</div>}
+
             {citySuggestions.length > 0 && (
               <div className={suggestionsContainerClassName}>
                 <ul className={suggestionListClassName}>
-                  {citySuggestions.map((city, idx) => (
+                  {citySuggestions.map((c, idx) => (
                     <li
-                      key={`${city.geoname_id}-${idx}`}
+                      key={`${c.geoname_id}-${idx}`}
                       className={suggestionItemClassName}
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        handleCitySelect(city);
+                        handleCitySelect(c);
                       }}
                     >
-                      {city.ascii_name ?? city.name}
+                      {c.ascii_name ?? c.name}
                     </li>
                   ))}
                 </ul>
@@ -363,5 +454,4 @@ const LocationSelect = forwardRef<LocationSelectActions, Props>(
 );
 
 LocationSelect.displayName = "LocationSelect";
-
 export default LocationSelect;

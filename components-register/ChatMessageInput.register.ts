@@ -27,7 +27,7 @@ export function registerChatMessageInput(PLASMIC: any) {
       onEnter: {
         type: "eventHandler",
         displayName: "On Enter (send)",
-        argTypes: [], // ✅ Fix
+        argTypes: [],
       },
 
       autoFocus: {
@@ -44,6 +44,13 @@ export function registerChatMessageInput(PLASMIC: any) {
         type: "number",
         displayName: "Max rows",
         defaultValue: 5,
+      },
+
+      // ✅ neu: ID für Textarea (damit du per Button focusen kannst)
+      textareaId: {
+        type: "string",
+        displayName: "Textarea id",
+        defaultValueHint: "photoCommentInput",
       },
 
       // Styling Props – A/B/C/D

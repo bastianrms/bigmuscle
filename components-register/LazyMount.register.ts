@@ -7,7 +7,7 @@ export function registerLazyMount(PLASMIC: any) {
     displayName: "Lazy mount (conditional)",
 
     // ✅ Wichtig für plasmic sync / Import-Fixing
-importPath: "../components/LayzyMount",
+    importPath: "../components/LayzyMount",
 
     props: {
       active: {
