@@ -13,7 +13,7 @@ type Props = {
   enabled?: boolean;
   endpoint?: string; // default: "/api/chat/unreadCount"
   dataName?: string; // default: "chatUnread"
-  pollMs?: number;   // default: 30000
+  pollMs?: number; // default: 30000
 };
 
 type GlobalState = {
@@ -25,8 +25,18 @@ type GlobalState = {
   pollMs: number;
 };
 
+type WindowWithUnreadPoller = Window & {
+  __bmUnreadPoller?: GlobalState;
+};
+
+function normalizePollMs(v: unknown, fallback = 30_000) {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(30_000, Math.trunc(n));
+}
+
 function getGlobalState(endpoint: string, pollMs: number): GlobalState {
-  const w = window as any;
+  const w = window as unknown as WindowWithUnreadPoller;
 
   if (!w.__bmUnreadPoller) {
     w.__bmUnreadPoller = {
@@ -36,10 +46,10 @@ function getGlobalState(endpoint: string, pollMs: number): GlobalState {
       listeners: new Set(),
       endpoint,
       pollMs,
-    } as GlobalState;
+    };
   }
 
-  const gs = w.__bmUnreadPoller as GlobalState;
+  const gs = w.__bmUnreadPoller;
 
   // keep config in sync (if props change)
   gs.endpoint = endpoint;
@@ -105,7 +115,7 @@ export default function ChatUnreadCountShell(props: Props) {
       }
       setCount(res);
     } catch {
-      // keep old count on transient errors (nicht immer 0 setzen)
+      // keep old count on transient errors
     } finally {
       setLoading(false);
     }
@@ -114,13 +124,13 @@ export default function ChatUnreadCountShell(props: Props) {
   React.useEffect(() => {
     if (inStudio) return;
 
-    const effectivePollMs = Math.max(30_000, Number.isFinite(pollMs as any) ? pollMs : 30_000);
-const gs = getGlobalState(endpoint, effectivePollMs);
+    const effectivePollMs = normalizePollMs(pollMs, 30_000);
+    const gs = getGlobalState(endpoint, effectivePollMs);
 
     const listener = (c: number) => setCount(c);
     gs.listeners.add(listener);
 
-    // push last known immediately (so UI updates even before first tick)
+    // push last known immediately
     setCount(gs.lastCount);
 
     const stopGlobal = () => {
@@ -156,7 +166,7 @@ const gs = getGlobalState(endpoint, effectivePollMs);
         gs.lastCount = res;
         gs.listeners.forEach((fn) => fn(res));
       } catch {
-        // transient errors: do nothing (keep lastCount)
+        // transient errors: keep lastCount
       }
     };
 
@@ -164,20 +174,17 @@ const gs = getGlobalState(endpoint, effectivePollMs);
       if (gs.running) return;
       gs.running = true;
 
-      // first tick immediately
       void tick();
-
-      // interval
       gs.intervalId = window.setInterval(() => void tick(), gs.pollMs);
     };
 
-    // start
     startGlobal();
 
     // auth changes => tick now, and restart interval if it was stopped by 401
     const { data: sub } = supabaseClient.auth.onAuthStateChange(() => {
-      const effectivePollMs2 = Math.max(30_000, Number.isFinite(pollMs as any) ? pollMs : 30_000);
-const gs2 = getGlobalState(endpoint, effectivePollMs2);
+      const effectivePollMs2 = normalizePollMs(pollMs, 30_000);
+      const gs2 = getGlobalState(endpoint, effectivePollMs2);
+
       if (!gs2.running) {
         gs2.running = true;
         void tick();
@@ -187,7 +194,6 @@ const gs2 = getGlobalState(endpoint, effectivePollMs2);
       }
     });
 
-    // route changes (App Router + pushState): optional manual event you already use
     const onRoute = () => void tick();
     window.addEventListener("bm:routechange", onRoute);
 
@@ -208,5 +214,9 @@ const gs2 = getGlobalState(endpoint, effectivePollMs2);
     [count, loading, refreshLocal]
   );
 
-  return <DataProvider name={dataName} data={ctx}>{children}</DataProvider>;
+  return (
+    <DataProvider name={dataName} data={ctx}>
+      {children}
+    </DataProvider>
+  );
 }
